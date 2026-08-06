@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 
-const API_KEY = '5ab0dfe927d879768a2c3386085bd202'; // Your API key
+const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 
 const backgrounds: Record<string, any> = {
   Clear: require('../../assets/images/clear.jpg'),
@@ -40,6 +40,10 @@ export default function HomeScreen() {
 
   const getWeather = async () => {
     if (!city) return;
+    if (!API_KEY) {
+      alert('OpenWeather API configuration is missing.');
+      return;
+    }
     setLoading(true);
     setWeather(null);
     setForecast([]);
