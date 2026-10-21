@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { demoWeather } from '@/utils/demoWeather';
+import { temperature, windSpeed } from '@/utils/units';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +17,7 @@ import {
   View,
 } from 'react-native';
 
+const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
 const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 
 const backgrounds: Record<string, any> = {
@@ -39,8 +42,8 @@ export default function HomeScreen() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   const getWeather = async () => {
-    if (!city) return;
-    if (!API_KEY) {
+    if (!city.trim() || loading) return;
+    if (!API_KEY && !DEMO_MODE) {
       alert('OpenWeather API configuration is missing.');
       return;
     }
@@ -49,16 +52,16 @@ export default function HomeScreen() {
     setForecast([]);
     setSelectedDay(null);
     try {
-      // Current weather
-      const weatherResponse = await axios.get(
-        `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=${unit}`
+      // Store API values in metric; convert only for display.
+      const weatherResponse = DEMO_MODE ? { data: demoWeather(city).current } : await axios.get(
+        `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city.trim())}&appid=${API_KEY}&units=metric`
       );
 
       setWeather(weatherResponse.data);
 
       // 5-day forecast
-      const forecastResponse = await axios.get(
-        `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${API_KEY}&units=${unit}`
+      const forecastResponse = DEMO_MODE ? { data: demoWeather(city).forecast } : await axios.get(
+        `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city.trim())}&appid=${API_KEY}&units=metric`
       );
 
       // Process forecastResponse to get one forecast per day (at 12:00:00)
@@ -78,7 +81,7 @@ export default function HomeScreen() {
 
       setForecast(dailyForecasts);
       setLastUpdated(new Date());
-    } catch (error) {
+    } catch {
       alert('City not found or error fetching data!');
       setWeather(null);
       setForecast([]);
@@ -113,6 +116,7 @@ export default function HomeScreen() {
       <ImageBackground
         source={backgroundImage}
         style={styles.background}
+        imageStyle={{ width: '100%', height: '100%' }}
         resizeMode="cover"
       >
         <ScrollView
@@ -123,16 +127,17 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.title}>🌤️ Weather App</Text>
+          {DEMO_MODE && <Text style={styles.demo}>DEMO MODE - Fictional weather data</Text>}
           <TextInput
             style={styles.input}
             placeholder="Enter city name"
-            placeholderTextColor="#ccc"
+            placeholderTextColor="#666"
             value={city}
             onChangeText={setCity}
           />
           <View style={styles.buttonRow}>
-            <Button title="Get Weather" onPress={getWeather} color="#1E90FF" />
-            <TouchableOpacity onPress={toggleUnit} style={styles.unitButton}>
+            <Button title="Get Weather" disabled={loading} onPress={getWeather} color="#1E90FF" />
+            <TouchableOpacity accessibilityRole="button" onPress={toggleUnit} style={styles.unitButton}>
               <Text style={styles.unitButtonText}>
                 Switch to {unit === 'metric' ? '°F' : '°C'}
               </Text>
@@ -148,17 +153,17 @@ export default function HomeScreen() {
               <View style={styles.result}>
                 <Text style={styles.city}>{weather.name}</Text>
                 <Text style={styles.temp}>
-                  {Math.round(weather.main.temp)}
+                  {temperature(weather.main.temp, unit)}
                   {tempUnit}
                 </Text>
                 <Text style={styles.condition}>{weather.weather[0].main}</Text>
                 <Text style={styles.details}>
-                  Feels like: {Math.round(weather.main.feels_like)}
+                  Feels like: {temperature(weather.main.feels_like, unit)}
                   {tempUnit}
                 </Text>
                 <Text style={styles.details}>Humidity: {weather.main.humidity}%</Text>
                 <Text style={styles.details}>
-                  Wind speed: {weather.wind.speed} {windUnit}
+                  Wind speed: {windSpeed(weather.wind.speed, unit)} {windUnit}
                 </Text>
                 <Image
                   source={{
@@ -181,7 +186,7 @@ export default function HomeScreen() {
               >
                 {forecast.map((day, index) => (
                   <TouchableOpacity
-                    key={index}
+                    key={index} accessibilityRole="button" accessibilityLabel={`Forecast ${day.dt_txt.slice(0, 10)}`}
                     style={[
                       styles.forecastCard,
                       selectedDay === index && styles.selectedCard,
@@ -196,7 +201,7 @@ export default function HomeScreen() {
                       style={{ width: 50, height: 50 }}
                     />
                     <Text style={styles.forecastTemp}>
-                      {Math.round(day.main.temp)}
+                      {temperature(day.main.temp, unit)}
                       {tempUnit}
                     </Text>
                     <Text style={styles.forecastCondition}>{day.weather[0].main}</Text>
@@ -210,18 +215,18 @@ export default function HomeScreen() {
                     Date: {forecast[selectedDay].dt_txt}
                   </Text>
                   <Text style={styles.details}>
-                    Temp: {Math.round(forecast[selectedDay].main.temp)}
+                    Temp: {temperature(forecast[selectedDay].main.temp, unit)}
                     {tempUnit}
                   </Text>
                   <Text style={styles.details}>
-                    Feels like: {Math.round(forecast[selectedDay].main.feels_like)}
+                    Feels like: {temperature(forecast[selectedDay].main.feels_like, unit)}
                     {tempUnit}
                   </Text>
                   <Text style={styles.details}>
                     Humidity: {forecast[selectedDay].main.humidity}%
                   </Text>
                   <Text style={styles.details}>
-                    Wind speed: {forecast[selectedDay].wind.speed} {windUnit}
+                    Wind speed: {windSpeed(forecast[selectedDay].wind.speed, unit)} {windUnit}
                   </Text>
                   <Text style={styles.details}>
                     Condition: {forecast[selectedDay].weather[0].main}
@@ -237,6 +242,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  demo: { color: '#fff', backgroundColor: '#23466b', padding: 10, textAlign: 'center', marginTop: 12, borderRadius: 8 },
   container: { flex: 1 },
   background: { flex: 1 },
   overlay: {
